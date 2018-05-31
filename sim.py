@@ -85,7 +85,8 @@ class Car(Drawable):
         self.ang = angle
         self.dest = destination
         self.speed = Speed()
-        self.image = pygame.transform.rotate(self.image, self.ang)
+        self.original_image = self.image
+        self.image = pygame.transform.rotate(self.original_image, self.ang)
         self.rect = self.image.get_rect(center=self.pos.get_center())
         print("initiated new car at position: " + str(self.pos))
 
@@ -103,13 +104,13 @@ class Car(Drawable):
 
     def rotate(self, angle):
         "rotate counter-clockwise for (angle) degrees"
-        self.image = pygame.transform.rotate(self.image, angle)
-        self.rect = self.image.get_rect(center=self.rect.center)
-        self.ang += angle
+        self.rotate_to(self.ang + angle)
 
     def rotate_to(self, angle):
         "rotate to a certain angle"
-        self.rotate(angle - self.angle)
+        self.image = pygame.transform.rotate(self.original_image, angle)
+        self.rect = self.image.get_rect(center=self.rect.center)
+        self.ang = angle
 
 
 def main():
@@ -131,6 +132,7 @@ def main():
 
         car.clear(screen, imgFactory.background())
         car.move(10 * direction, 0)
+        car.rotate(10)
         print(car.pos)
         if not SCREEN_RECT.contains(car.rect):
             direction = direction * -1
