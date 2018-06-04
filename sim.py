@@ -1,5 +1,4 @@
-import pygame
-import sys
+import pygame, sys, math
 from pygame.locals import *
 
 
@@ -12,33 +11,40 @@ CAR_LENGTH      = 30
 CAR_WIDTH       = 20
 
 ROAD_WIDTH      = 25
+CURB_WIDTH      = 3
 
 BLACK           = Color(0, 0, 0)
 WHITE           = Color(255, 255, 255)
+GRAY            = Color(180, 180, 180)
 
 # globals
 dirtyrects = [] # list of update_rects
 
 # images
-class ImgFactory:
-    def carImg(self):
+class Img:
+    def car():
         car = pygame.image.load("resources/car.png").convert()
         car.set_colorkey(WHITE)
         car = pygame.transform.scale(car, (CAR_LENGTH, CAR_WIDTH))
         return car
 
-    def backgroundImg(self, width = SCREEN_WIDTH, height = SCREEN_HEIGHT):
-        bg = pygame.Surface((int(width), int(height)))
+    def background(width = SCREEN_WIDTH, height = SCREEN_HEIGHT):
+        bg = pygame.Surface((width, height))
         bg.fill(BLACK)
         return bg
 
-    def intersectionImg(self, width = ROAD_WIDTH, height = ROAD_WIDTH):
-        img = pygame.Surface((int(width), int(height)))
-        img.fill(WHITE)
+    def intersection(width = ROAD_WIDTH, height = ROAD_WIDTH):
+        img = pygame.Surface((width, height))
+        img.fill(GRAY)
         return img
 
-
-imgFactory = ImgFactory()
+    def road(length, width = ROAD_WIDTH):
+        img = pygame.Surface((length, width + 2 * CURB_WIDTH))
+        img.fill(GRAY)
+        img.fill(WHITE, Rect(0, 0, length, CURB_WIDTH))
+        img.fill(WHITE, Rect(0, width + CURB_WIDTH, length, CURB_WIDTH))
+        print(img.get_rect())
+        return img
 
 
 class Drawable:
@@ -53,8 +59,6 @@ class Drawable:
 
     def clear(self, screen, background):
         r = screen.blit(background, self.rect, self.rect)
-        print("clearing " + str(self.rect.clip(SCREEN_RECT)))
-        #r = screen.blit(backgroun, (0,0))
         dirtyrects.append(r)
 
 
@@ -68,6 +72,20 @@ class Position:
 
     def get_center(self):
         return (self.x, self.y)
+
+    def dist(self, dest):
+        return math.sqrt((self.x - dest.x) * (self.x - dest.x) + (self.y - dest.y) * (self.y - dest.y))
+
+    def dir(self, dest):
+        if self.x == dest.x:
+            return 90
+        elif self.y == dest.y:
+            return 0
+        else:
+            return math.atan((self.y - dest.y) / (self.x - dest.x)) * 180 / math.pi
+
+    def mid(self, dest):
+        return Position((self.x + dest.x) / 2, (self.y + dest.y) / 2)
 
     def move(self, x, y):
         self.x += x
@@ -97,8 +115,8 @@ class TrafficController:
 
 
 class Intersection(Drawable):
-    def __init__(self, center = Position(), outs = dict(), ins = dict(), traffic_control = None):
-        Drawable.__init__(self, imgFactory.intersectionImg())
+    def __init__(self, center = Position(), traffic_control = None, outs = dict(), ins = dict()):
+        Drawable.__init__(self, Img.intersection())
         self.pos = center
         self.rect = self.image.get_rect(center=self.pos.get_center())
         self.outs = outs
@@ -112,18 +130,31 @@ class Intersection(Drawable):
         return "Intersection " + str(self.pos)
 
     def add_outlet(self, out_intersect, out_road):
-        if out_intersect in outs:
+        if out_intersect in self.outs:
             raise Exception("A road to " + str(out_intersect) + " already exists")
         self.outs[out_intersect] = out_road
 
     def add_inlet(self, in_intersect, in_road):
-        if in_intersect in ins:
+        if in_intersect in self.ins:
             raise Exception("A road from " + str(in_interset) + " already exists")
         self.ins[in_intersect] = in_road
 
 
 class Road(Drawable):
-    pass
+    def __init__(self, start, end):
+        self.length = start.pos.dist(end.pos)
+        Drawable.__init__(self, Img.road(self.length))
+        self.start = start
+        self.end = end
+        self.start.add_outlet(self.end, self)
+        self.end.add_inlet(self.start, self)
+        self.angle = self.start.pos.dir(self.end.pos)
+        self.image = pygame.transform.rotate(self.image, self.angle)
+        self.rect = self.image.get_rect(center=self.start.pos.mid(self.end.pos).get_center())
+        print("length ", self.length, "angle ", self.angle, "mid ", self.start.pos.mid(self.end.pos))
+        print(self.rect)
+        print("inistiated new Road from ", self.start, " to ", self.end)
+
 
 class TrafficLightController(TrafficController):
     def get_controller(self, intersection):
@@ -132,7 +163,7 @@ class TrafficLightController(TrafficController):
 
 class Car(Drawable):
     def __init__(self, center = Position(), angle = 0, destination = Position()):
-        Drawable.__init__(self, imgFactory.carImg())
+        Drawable.__init__(self, Img.car())
         self.pos = center
         self.ang = angle
         self.dest = destination
@@ -150,14 +181,14 @@ class Car(Drawable):
         old_pos = str(self.pos)
         self.pos.move(x, y)
         self.rect.center = self.pos.get_center()
-        print(str(self) + " moved from " + old_pos)
+        #print(str(self) + " moved from " + old_pos)
 
     def move_to(self, position):
         "move to a new position"
         old_pos = str(self.pos)
         self.pos = position
         self.rect.center = self.pos.get_center()
-        print(str(self) + " moved from " + old_pos)
+        #print(str(self) + " moved from " + old_pos)
 
     def rotate(self, angle):
         "rotate counter-clockwise for (angle) degrees"
@@ -182,13 +213,17 @@ def main():
     background = pygame.Surface(SCREEN_RECT.size)
     background.fill(BLACK)
 
-    intersect = Intersection()
-    intersect.draw(background)
+    intersect1 = Intersection(Position(100, 300))
+    intersect1.draw(background)
+    intersect2 = Intersection(Position(400, 300))
+    intersect2.draw(background)
+    road = Road(intersect1, intersect2)
+    road.draw(background)
 
     screen.blit(background, SCREEN_RECT)
 
     # create cars
-    car = Car()
+    car = Car(Position(105, 300))
 
     direction = 1
     while True:
@@ -198,10 +233,9 @@ def main():
             if event.type == pygame.QUIT: sys.exit()
 
         car.clear(screen, background)
-        car.move(10 * direction, 0)
-        car.rotate(10)
+        car.move(5 * direction, 0)
         print(car.pos)
-        if not SCREEN_RECT.contains(car.rect):
+        if not road.rect.unionall([intersect1.rect, intersect2.rect]).contains(car.rect):
             direction = direction * -1
         
         car.draw(screen)
